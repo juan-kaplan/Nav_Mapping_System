@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'mappeate_y_ubicate = mappeate_y_ubicate.fastslam:main',
         ],
     },
 )
