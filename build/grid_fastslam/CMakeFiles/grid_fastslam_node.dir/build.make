@@ -126,6 +126,8 @@ grid_fastslam_node: /home/alumno1/Documents/destroyer_ws/install/custom_msgs/lib
 grid_fastslam_node: /home/alumno1/Documents/destroyer_ws/install/custom_msgs/lib/libcustom_msgs__rosidl_typesupport_introspection_cpp.so
 grid_fastslam_node: /home/alumno1/Documents/destroyer_ws/install/custom_msgs/lib/libcustom_msgs__rosidl_typesupport_cpp.so
 grid_fastslam_node: /home/alumno1/Documents/destroyer_ws/install/custom_msgs/lib/libcustom_msgs__rosidl_generator_py.so
+grid_fastslam_node: /usr/lib/gcc/x86_64-linux-gnu/11/libgomp.so
+grid_fastslam_node: /usr/lib/x86_64-linux-gnu/libpthread.a
 grid_fastslam_node: /opt/ros/humble/lib/libsensor_msgs__rosidl_typesupport_c.so
 grid_fastslam_node: /opt/ros/humble/lib/libsensor_msgs__rosidl_generator_c.so
 grid_fastslam_node: /opt/ros/humble/lib/libsensor_msgs__rosidl_typesupport_cpp.so

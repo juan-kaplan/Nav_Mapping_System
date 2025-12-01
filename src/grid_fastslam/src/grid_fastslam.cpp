@@ -1,3 +1,4 @@
+#include <omp.h>
 #include "grid_fastslam/grid_fastslam.hpp"
 
 namespace grid_fastslam
@@ -102,6 +103,7 @@ namespace grid_fastslam
         // The "Line Drawing" Algorithm
         // This connects two grid cells with the pixels in between
         std::vector<std::pair<int, int>> cells;
+        cells.reserve(300);
 
         int di = std::abs(i1 - i0);
         int dj = std::abs(j1 - j0);
@@ -132,62 +134,92 @@ namespace grid_fastslam
         return cells;
     }
 
+    void GridFastSlam::init_lut(const sensor_msgs::msg::LaserScan::SharedPtr scan)
+    {
+        // Only calculate if the table is empty or size changed
+        if (scan_lut_.size() == scan->ranges.size())
+            return;
+
+        scan_lut_.clear();
+        scan_lut_.reserve(scan->ranges.size());
+
+        double angle = scan->angle_min;
+
+        // Define Field of View Limits (-PI/2 to +PI/2)
+        const double angle_min_limit = -M_PI_4;
+        const double angle_max_limit = M_PI_4;
+
+        for (size_t i = 0; i < scan->ranges.size(); ++i)
+        {
+            RayLUT entry;
+
+            // 1. Normalize Angle (The heavy "while" loop logic)
+            double angle_wrapped = angle;
+            while (angle_wrapped > M_PI)
+                angle_wrapped -= 2.0 * M_PI;
+            while (angle_wrapped < -M_PI)
+                angle_wrapped += 2.0 * M_PI;
+
+            // 2. Pre-calculate Trigonometry
+            entry.cos_a = std::cos(angle); // Note: cos(angle) == cos(wrapped)
+            entry.sin_a = std::sin(angle);
+
+            // 3. Pre-calculate FOV check
+            if (angle_wrapped >= angle_min_limit && angle_wrapped <= angle_max_limit)
+            {
+                entry.is_valid_fov = true;
+            }
+            else
+            {
+                entry.is_valid_fov = false;
+            }
+
+            scan_lut_.push_back(entry);
+
+            angle += scan->angle_increment;
+        }
+
+        RCLCPP_INFO(this->get_logger(), "LUT Initialized with %zu rays.", scan_lut_.size());
+    }
+
     // =========================================================
     // GRID UPDATE LOGIC
     // =========================================================
 
     // Internal helper to calculate where laser points land in the world
     // Optimization: Only process points within +/- 90 degrees (Front view)
-    std::vector<std::pair<double, double>> get_scan_endpoints(
+    std::vector<std::pair<double, double>> GridFastSlam::get_scan_endpoints(
         const Particle &p,
-        const sensor_msgs::msg::LaserScan::SharedPtr scan)
+        const sensor_msgs::msg::LaserScan::SharedPtr scan,
+        const std::vector<GridFastSlam::RayLUT> &lut,
+        bool use_narrow_fov)
     {
         std::vector<std::pair<double, double>> points;
-        double raw_angle = scan->angle_min;
+        points.reserve(scan->ranges.size());
+
         double limit_max = scan->range_max - 0.001;
 
         // Pre-compute particle rotation
         double sin_p = std::sin(p.yaw);
         double cos_p = std::cos(p.yaw);
 
-        // Define Field of View Limits (-PI/2 to +PI/2)
-        const double angle_min_limit = -M_PI_2; // -90 degrees
-        const double angle_max_limit = M_PI_2;  // +90 degrees
-
         for (size_t k = 0; k < scan->ranges.size(); ++k)
         {
-            double r = scan->ranges[k];
 
-            // --- NEW: Normalize angle to [-PI, PI] ---
-            double angle_wrapped = raw_angle;
-            while (angle_wrapped > M_PI)
-                angle_wrapped -= 2.0 * M_PI;
-            while (angle_wrapped < -M_PI)
-                angle_wrapped += 2.0 * M_PI;
-
-            // 1. FILTER: Now this works for both sides!
-            if (angle_wrapped >= angle_min_limit && angle_wrapped <= angle_max_limit)
+            if (!use_narrow_fov || lut[k].is_valid_fov)
             {
+                double r = scan->ranges[k];
 
-                // 2. VALIDITY: Check if range is valid
                 if (std::isfinite(r) && r > scan->range_min && r < limit_max)
                 {
+                    double lx = r * lut[k].cos_a;
+                    double ly = r * lut[k].sin_a;
 
-                    // Polar -> Cartesian (Scanner Frame)
-                    // Note: Use raw_angle (or wrapped, sin/cos are same)
-                    double lx = r * std::cos(raw_angle);
-                    double ly = r * std::sin(raw_angle);
-
-                    // Rotation + Translation (World Frame)
                     double wx = (cos_p * lx - sin_p * ly) + p.x;
                     double wy = (sin_p * lx + cos_p * ly) + p.y;
-
                     points.push_back({wx, wy});
                 }
             }
-
-            // Always increment the RAW angle tracker
-            raw_angle += scan->angle_increment;
         }
         return points;
     }
@@ -195,9 +227,12 @@ namespace grid_fastslam
     void GridFastSlam::update_grid(Particle &p, const sensor_msgs::msg::LaserScan::SharedPtr scan)
     {
         // 1. Get where the laser hits are in the real world
-        auto endpoints = get_scan_endpoints(p, scan);
+        auto endpoints = get_scan_endpoints(p, scan, scan_lut_, true);
         if (endpoints.empty())
             return;
+
+        int last_r = -1000;
+        int last_c = -1000;
 
         // 2. Get Robot's position in the grid
         auto [r0, c0] = world_to_grid(p.x, p.y);
@@ -205,7 +240,7 @@ namespace grid_fastslam
             return;
 
         // 3. Loop through rays
-        int beam_step = 5;
+        int beam_step = 1;
 
         for (size_t k = 0; k < endpoints.size(); k += beam_step)
         {
@@ -216,17 +251,25 @@ namespace grid_fastslam
             if (r1 < 0 || r1 >= MAP_HEIGHT || c1 < 0 || c1 >= MAP_WIDTH)
                 continue;
 
+            if (r1 == last_r && c1 == last_c)
+            {
+                int idx_hit = r1 * MAP_WIDTH + c1;
+                p.grid[idx_hit] += L_OCC;
+                if (p.grid[idx_hit] > L_MAX)
+                    p.grid[idx_hit] = L_MAX;
+                continue;
+            }
+
+            last_r = r1;
+            last_c = c1;
+
             // 4. Raycast (Bresenham)
-            // Get all cells between robot and hit point
             auto ray = bresenham(r0, c0, r1, c1);
 
-            // A. Free Space (All cells EXCEPT the last one)
             for (size_t j = 0; j < ray.size() - 1; ++j)
             {
                 int fr = ray[j].first;
                 int fc = ray[j].second;
-
-                // Boundary check (safe programming)
                 if (fr >= 0 && fr < MAP_HEIGHT && fc >= 0 && fc < MAP_WIDTH)
                 {
                     int idx = fr * MAP_WIDTH + fc; // 2D -> 1D Index
@@ -236,7 +279,6 @@ namespace grid_fastslam
                 }
             }
 
-            // B. Occupied Space (The last cell where the laser hit)
             int idx_hit = r1 * MAP_WIDTH + c1;
             p.grid[idx_hit] += L_OCC;
             if (p.grid[idx_hit] > L_MAX)
@@ -272,15 +314,15 @@ namespace grid_fastslam
     void GridFastSlam::update_particles(const sensor_msgs::msg::LaserScan::SharedPtr scan)
     {
         std::vector<double> log_weights(num_particles_);
-        bool any_valid_weight = false;
 
-        // 1. Calculate weight for EACH particle
+// 1. Calculate weight for EACH particle
+#pragma omp parallel for
         for (int i = 0; i < num_particles_; ++i)
         {
-            auto &p = particles_[i];
+            const auto &p = particles_[i];
 
             // Get valid scan points in World Frame
-            auto endpoints = get_scan_endpoints(p, scan);
+            auto endpoints = get_scan_endpoints(p, scan, scan_lut_, false);
 
             // If no valid points, this particle is dead
             if (endpoints.empty())
@@ -293,54 +335,47 @@ namespace grid_fastslam
             int hit_count = 0;
 
             // Compare scan to the particle's OWN map
-            for (auto &pt : endpoints)
+            for (const auto &pt : endpoints)
             {
                 auto [r, c] = world_to_grid(pt.first, pt.second);
 
                 // Check if point is inside the map
                 if (r >= 0 && r < MAP_HEIGHT && c >= 0 && c < MAP_WIDTH)
                 {
-                    // Get the Log-Odds value from the grid
                     float log_odds = p.grid[r * MAP_WIDTH + c];
-
-                    // Inverse Sensor Model: Convert Log-Odds -> Probability
-                    // p = 1 / (1 + exp(-l))
                     double prob = 1.0 / (1.0 + std::exp(-log_odds));
-
-                    // Clip for stability (same as Python 1e-6)
                     prob = std::max(1e-6, std::min(prob, 1.0 - 1e-6));
 
-                    // Accumulate log-likelihood
                     log_w_sum += std::log(prob);
                     hit_count++;
                 }
             }
 
             if (hit_count > 0)
-            {
-                // Average log-likelihood (Geometric Mean of probabilities)
                 log_weights[i] = log_w_sum / hit_count;
-                any_valid_weight = true;
-            }
             else
-            {
                 log_weights[i] = -1.0e9;
+        }
+
+        bool any_valid_weight = false;
+        for (double w : log_weights)
+        {
+            if (w > -1.0e8)
+            {
+                any_valid_weight = true;
+                break;
             }
         }
 
         // 2. Normalize Weights (LogSumExp Trick)
         if (!any_valid_weight)
         {
-            // If all particles failed, reset to uniform distribution
             for (auto &p : particles_)
                 p.weight = 1.0 / num_particles_;
         }
         else
         {
-            // Calculate the normalizing constant
             double log_sum = log_sum_exp(log_weights);
-
-            // Update linear weights: w = exp(log_w - log_sum)
             for (int i = 0; i < num_particles_; ++i)
             {
                 particles_[i].weight = std::exp(log_weights[i] - log_sum);
@@ -398,16 +433,25 @@ namespace grid_fastslam
 
     void GridFastSlam::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
     {
+        // Initialize Lookup Table if needed
+        init_lut(msg);
+
         // 1. Update Weights based on how well scan matches map
         update_particles(msg);
 
         // 2. Resample (Evolution) - Kill bad particles, multiply good ones
         resample();
 
-        // 3. Update Map (Learning) - Update the grid of every particle
-        for (auto &p : particles_)
+        // 3. Update Maps (Grid) for each particle
+        map_update_counter++;
+        if (map_update_counter >= map_update_interval)
         {
-            update_grid(p, msg);
+#pragma omp parallel for
+            for (auto &p : particles_)
+            {
+                update_grid(p, msg);
+            }
+            map_update_counter = 0;
         }
 
         // 4. Publish Visualization

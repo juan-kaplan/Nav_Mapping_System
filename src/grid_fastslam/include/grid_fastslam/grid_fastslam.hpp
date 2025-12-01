@@ -65,6 +65,13 @@ namespace grid_fastslam
         GridFastSlam();
         ~GridFastSlam() = default;
 
+        struct RayLUT
+        {
+            double cos_a;
+            double sin_a;
+            bool is_valid_fov; // Is this ray within +/- 90 degrees?
+        };
+
     private:
         // --- ROS 2 Interfaces ---
         rclcpp::Subscription<custom_msgs::msg::DeltaOdom>::SharedPtr delta_sub_;
@@ -77,6 +84,8 @@ namespace grid_fastslam
         std::vector<Particle> particles_;
         int num_particles_;
         nav_msgs::msg::Path path_msg_;
+        int map_update_counter = 0;
+        int map_update_interval = 3;
 
         // Random Number Generation
         std::mt19937 rng_;
@@ -97,9 +106,20 @@ namespace grid_fastslam
         std::pair<int, int> world_to_grid(double x, double y);
         std::vector<std::pair<int, int>> bresenham(int i0, int j0, int i1, int j1);
         void publish_map_and_path();
+        std::vector<std::pair<double, double>> get_scan_endpoints(
+            const Particle &p,
+            const sensor_msgs::msg::LaserScan::SharedPtr scan,
+            const std::vector<RayLUT> &lut,
+            bool use_narrow_fov = false // <--- NEW ARGUMENT (Default to false/full view)
+        );
 
         // Math helper
         double normalize_angle(double angle);
+
+        std::vector<RayLUT> scan_lut_;
+
+        // Helper to fill the table
+        void init_lut(const sensor_msgs::msg::LaserScan::SharedPtr scan);
     };
 
 } // namespace grid_fastslam

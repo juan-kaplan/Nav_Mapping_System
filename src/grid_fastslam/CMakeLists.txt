@@ -19,6 +19,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(custom_msgs REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # 2. Include Header Directories
 # Tells CMake where to look for grid_fast_slam.hpp
@@ -30,6 +31,10 @@ add_executable(grid_fastslam_node
   src/grid_fastslam.cpp
   src/main.cpp
 )
+
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(grid_fastslam_node OpenMP::OpenMP_CXX)
+endif()
 
 # 4. Link Dependencies
 # Links the libraries found in step 1 to your executable
@@ -59,6 +64,10 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_compile_options(-O3 -march=native)
 endif()
 
 # Install launch files
