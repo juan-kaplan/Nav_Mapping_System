@@ -10,41 +10,40 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory('mappeate_y_ubicate')
+    pkg_share = get_package_share_directory("mappeate_y_ubicate")
 
     rviz_config_file = LaunchConfiguration(
-        'rviz_config',
-        default=os.path.join(pkg_share, 'rviz', 'slam.rviz')
+        "rviz_config", default=os.path.join(pkg_share, "rviz", "slam.rviz")
     )
 
     # Declare launch argument for num_particles
     num_particles_arg = DeclareLaunchArgument(
         "num_particles",
-        default_value="10",
-        description="Number of particles for the filter"
+        default_value="50",
+        description="Number of particles for the filter",
     )
 
     delta_odom_node = Node(
-        package='mappeate_y_ubicate',
-        executable='delta_odom',
-        name='delta_odom_node',
-        output='screen'
+        package="mappeate_y_ubicate",
+        executable="delta_odom",
+        name="delta_odom_node",
+        output="screen",
     )
 
     fast_slam_node = Node(
-        package='mappeate_y_ubicate',
-        executable='fastslam',
-        name='fast_slam_node',
-        output='screen',
-        parameters=[{"num_particles": LaunchConfiguration("num_particles")}]
+        package="mappeate_y_ubicate",
+        executable="fastslam",
+        name="fast_slam_node",
+        output="screen",
+        parameters=[{"num_particles": LaunchConfiguration("num_particles")}],
     )
 
     rviz2_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config_file]
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=["-d", rviz_config_file],
     )
 
     ld = LaunchDescription()
