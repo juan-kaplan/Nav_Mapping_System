@@ -1,0 +1,44 @@
+[0.617s] Invoking command in '/home/juan/Documents/fundamentos_robotica/destroyer_ws/src/tools': AMENT_PREFIX_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs:${CMAKE_PREFIX_PATH} LD_LIBRARY_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs/lib:/home/juan/Documents/fundamentos_robotica/ws/install/custom_msgs/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins PYTHONPATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs/local/lib/python3.10/dist-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/tools build --build-base /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build install --record /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/install.log --single-version-externally-managed install_data
+[0.828s] running egg_info
+[0.828s] creating ../../build/tools/tools.egg-info
+[0.828s] writing ../../build/tools/tools.egg-info/PKG-INFO
+[0.828s] writing dependency_links to ../../build/tools/tools.egg-info/dependency_links.txt
+[0.829s] writing entry points to ../../build/tools/tools.egg-info/entry_points.txt
+[0.829s] writing requirements to ../../build/tools/tools.egg-info/requires.txt
+[0.829s] writing top-level names to ../../build/tools/tools.egg-info/top_level.txt
+[0.829s] writing manifest file '../../build/tools/tools.egg-info/SOURCES.txt'
+[0.830s] reading manifest file '../../build/tools/tools.egg-info/SOURCES.txt'
+[0.831s] adding license file 'LICENSE'
+[0.831s] writing manifest file '../../build/tools/tools.egg-info/SOURCES.txt'
+[0.831s] running build
+[0.831s] running build_py
+[0.831s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build
+[0.832s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib
+[0.832s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools
+[0.832s] copying tools/map_saver.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools
+[0.832s] copying tools/__init__.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools
+[0.832s] copying tools/delta_odom.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools
+[0.832s] running install
+[0.832s] running install_lib
+[0.833s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools
+[0.833s] copying /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools/map_saver.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools
+[0.833s] copying /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools/__init__.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools
+[0.833s] copying /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build/lib/tools/delta_odom.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools
+[0.834s] byte-compiling /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools/map_saver.py to map_saver.cpython-310.pyc
+[0.834s] byte-compiling /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools/__init__.py to __init__.cpython-310.pyc
+[0.835s] byte-compiling /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools/delta_odom.py to delta_odom.cpython-310.pyc
+[0.835s] running install_data
+[0.836s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/ament_index
+[0.836s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/ament_index/resource_index
+[0.836s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/ament_index/resource_index/packages
+[0.836s] copying resource/tools -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/ament_index/resource_index/packages
+[0.836s] copying package.xml -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/tools
+[0.836s] creating /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/tools/launch
+[0.836s] copying launch/odom.launch.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/share/tools/launch
+[0.836s] running install_egg_info
+[0.838s] Copying ../../build/tools/tools.egg-info to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages/tools-0.0.0-py3.10.egg-info
+[0.839s] running install_scripts
+[0.857s] Installing delta_odom script to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/tools
+[0.857s] Installing map_saver script to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/tools
+[0.857s] writing list of installed files to '/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/install.log'
+[0.895s] Invoked command in '/home/juan/Documents/fundamentos_robotica/destroyer_ws/src/tools' returned '0': AMENT_PREFIX_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs:${CMAKE_PREFIX_PATH} LD_LIBRARY_PATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs/lib:/home/juan/Documents/fundamentos_robotica/ws/install/custom_msgs/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins PYTHONPATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools/lib/python3.10/site-packages:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/custom_msgs/local/lib/python3.10/dist-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/tools build --build-base /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/build install --record /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/tools/install.log --single-version-externally-managed install_data

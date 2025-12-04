@@ -1,0 +1,26 @@
+[0.916s] Invoking command in '/home/juan/Documents/fundamentos_robotica/destroyer_ws/src/state_machine': PYTHONPATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/state_machine build --build-base /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/build install --record /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/install.log --single-version-externally-managed install_data
+[1.130s] running egg_info
+[1.131s] writing ../../build/state_machine/state_machine.egg-info/PKG-INFO
+[1.131s] writing dependency_links to ../../build/state_machine/state_machine.egg-info/dependency_links.txt
+[1.131s] writing entry points to ../../build/state_machine/state_machine.egg-info/entry_points.txt
+[1.131s] writing requirements to ../../build/state_machine/state_machine.egg-info/requires.txt
+[1.131s] writing top-level names to ../../build/state_machine/state_machine.egg-info/top_level.txt
+[1.133s] reading manifest file '../../build/state_machine/state_machine.egg-info/SOURCES.txt'
+[1.133s] adding license file 'LICENSE'
+[1.134s] writing manifest file '../../build/state_machine/state_machine.egg-info/SOURCES.txt'
+[1.134s] running build
+[1.134s] running build_py
+[1.134s] copying state_machine/map_publisher.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/build/lib/state_machine
+[1.135s] running install
+[1.135s] running install_lib
+[1.136s] copying /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/build/lib/state_machine/map_publisher.py -> /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages/state_machine
+[1.136s] byte-compiling /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages/state_machine/map_publisher.py to map_publisher.cpython-310.pyc
+[1.138s] running install_data
+[1.138s] running install_egg_info
+[1.139s] removing '/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages/state_machine-0.0.0-py3.10.egg-info' (and everything under it)
+[1.140s] Copying ../../build/state_machine/state_machine.egg-info to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages/state_machine-0.0.0-py3.10.egg-info
+[1.141s] running install_scripts
+[1.159s] Installing likelihood_map_publisher script to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/state_machine
+[1.159s] Installing map_publisher script to /home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/state_machine
+[1.160s] writing list of installed files to '/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/install.log'
+[1.200s] Invoked command in '/home/juan/Documents/fundamentos_robotica/destroyer_ws/src/state_machine' returned '0': PYTHONPATH=/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/state_machine build --build-base /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/build install --record /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/state_machine/install.log --single-version-externally-managed install_data

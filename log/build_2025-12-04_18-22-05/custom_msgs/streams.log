@@ -1,0 +1,23 @@
+[0.030s] Invoking command in '/home/juan/Documents/fundamentos_robotica/destroyer_ws/build/custom_msgs': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/tools:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/state_machine:/home/juan/Documents/fundamentos_robotica/destroyer_ws/install/mappeate_y_ubicate:/home/juan/Documents/fundamentos_robotica/ws/install/ubicate_nene:/home/juan/Documents/fundamentos_robotica/ws/install/paquete1:/home/juan/Documents/fundamentos_robotica/ws/install/no_te_choques:/home/juan/Documents/fundamentos_robotica/ws/install/custom_code:/opt/ros/humble /usr/bin/cmake --build /home/juan/Documents/fundamentos_robotica/destroyer_ws/build/custom_msgs -- -j12 -l12
+[0.574s] [ 10%] Built target custom_msgs__cpp
+[0.574s] [ 12%] Built target custom_msgs__rosidl_generator_c
+[0.574s] [ 12%] Built target ament_cmake_python_copy_custom_msgs
+[0.574s] [ 30%] Built target custom_msgs__rosidl_typesupport_fastrtps_cpp
+[0.574s] [ 33%] Built target custom_msgs__rosidl_typesupport_introspection_c
+[0.574s] [ 43%] Built target custom_msgs__rosidl_typesupport_c
+[0.574s] [ 53%] Built target custom_msgs__rosidl_typesupport_cpp
+[0.574s] [ 64%] Built target custom_msgs__rosidl_typesupport_fastrtps_c
+[0.574s] [ 74%] Built target custom_msgs__rosidl_typesupport_introspection_cpp
+[0.574s] [ 74%] Built target custom_msgs
+[0.575s] [ 76%] Built target custom_msgs__py
+[0.575s] [ 84%] Built target custom_msgs__rosidl_generator_py
+[0.575s] [ 94%] Built target custom_msgs__rosidl_typesupport_introspection_c__pyext
+[0.575s] [ 94%] Built target custom_msgs__rosidl_typesupport_fastrtps_c__pyext
+[0.575s] [100%] Built target custom_msgs__rosidl_typesupport_c__pyext
+[0.575s] running egg_info
+[0.575s] writing custom_msgs.egg-info/PKG-INFO
+[0.575s] writing dependency_links to custom_msgs.egg-info/dependency_links.txt
+[0.575s] writing top-level names to custom_msgs.egg-info/top_level.txt
+[0.575s] reading manifest file 'custom_msgs.egg-info/SOURCES.txt'
+[0.575s] writing manifest file 'custom_msgs.egg-info/SOURCES.txt'
+[0.575s] [100%] Built target ament_cmake_python_build_custom_msgs_egg
