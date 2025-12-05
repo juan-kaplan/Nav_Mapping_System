@@ -87,7 +87,8 @@ class Belief(metaclass=Metaclass_Belief):
         if 'covariance' not in kwargs:
             self.covariance = numpy.zeros(9, dtype=numpy.float64)
         else:
-            self.covariance = kwargs.get('covariance')
+            self.covariance = numpy.array(kwargs.get('covariance'), dtype=numpy.float64)
+            assert self.covariance.shape == (9, )
 
     def __repr__(self):
         typename = self.__class__.__module__.split('.')
@@ -120,7 +121,7 @@ class Belief(metaclass=Metaclass_Belief):
             return False
         if self.mu != other.mu:
             return False
-        if any(self.covariance != other.covariance):
+        if all(self.covariance != other.covariance):
             return False
         return True
 

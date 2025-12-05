@@ -81,6 +81,7 @@ namespace grid_fastslam
         rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
 
         rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
+        rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr best_map_pub_;
         rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
 
         rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;

@@ -26,7 +26,7 @@ namespace grid_fastslam
             std::bind(&GridFastSlam::scan_callback, this, std::placeholders::_1));
 
         map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("/map", map_qos);
-        best_map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("/best_map");
+        best_map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("/best_map", map_qos);
         path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/particle_robot_path", 10);
         pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/particle_pose", 10);
         particles_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/particles", 10);
@@ -52,10 +52,10 @@ namespace grid_fastslam
 
     void GridFastSlam::move_particles(double dr1, double dr2, double dt)
     {
-        const double alpha1 = 0.1;
-        const double alpha2 = 0.1;
-        const double alpha3 = 0.01;
-        const double alpha4 = 0.01;
+        const double alpha1 = 0.5;
+        const double alpha2 = 0.5;
+        const double alpha3 = 0.05;
+        const double alpha4 = 0.05;
 
         double sigma_rot1 = alpha1 * std::abs(dr1) + alpha2 * dt;
         double sigma_trans = alpha3 * dt + alpha4 * (std::abs(dr1) + std::abs(dr2));
@@ -141,8 +141,8 @@ namespace grid_fastslam
         double angle = scan->angle_min;
 
         // Define Field of View Limits
-        const double angle_min_limit = -M_PI_4;
-        const double angle_max_limit = M_PI_4;
+        const double angle_min_limit = -M_PI_2;
+        const double angle_max_limit = M_PI_2;
 
         for (size_t i = 0; i < scan->ranges.size(); ++i)
         {
@@ -226,7 +226,7 @@ namespace grid_fastslam
             return;
 
         // 3. Loop through rays
-        int beam_step = 1; 
+        int beam_step = 1;
 
         for (size_t k = 0; k < endpoints.size(); k += beam_step)
         {
@@ -247,7 +247,7 @@ namespace grid_fastslam
                 {
                     int idx = fr * MAP_WIDTH + fc; // 2D -> 1D Index
                     p.grid[idx] += L_FREE;
-                    
+
                     if (p.grid[idx] < L_MIN)
                         p.grid[idx] = L_MIN; // Clamp
                 }
@@ -256,7 +256,7 @@ namespace grid_fastslam
             // 5. Update the endpoint as occupied
             int idx_hit = r1 * MAP_WIDTH + c1;
             p.grid[idx_hit] += L_OCC;
-            
+
             if (p.grid[idx_hit] > L_MAX)
                 p.grid[idx_hit] = L_MAX; // Clamp
         }
@@ -293,6 +293,8 @@ namespace grid_fastslam
 
             // Get valid scan points in World Frame
             auto endpoints = get_scan_endpoints(p, scan, scan_lut_, false);
+
+            // If no valid endpoints, this particle is extremely unlikely
             if (endpoints.empty())
             {
                 log_weights[i] = -1.0e9;
@@ -307,9 +309,11 @@ namespace grid_fastslam
                 auto [r, c] = world_to_grid(pt.first, pt.second);
                 if (r >= 0 && r < MAP_HEIGHT && c >= 0 && c < MAP_WIDTH)
                 {
+                    // Get occupancy probability from map
                     float log_odds = p.grid[r * MAP_WIDTH + c];
-
                     double prob = 1.0 / (1.0 + std::exp(-log_odds));
+
+                    // Clamp probability to avoid log(0)
                     prob = std::max(1e-6, std::min(prob, 1.0 - 1e-6));
 
                     log_w_sum += std::log(prob);
@@ -318,11 +322,24 @@ namespace grid_fastslam
             }
 
             if (hit_count > 0)
-                log_weights[i] = log_w_sum / hit_count;
+            {
+                // 1. Current Measurement Likelihood (using average to flatten peaked distribution)
+                double current_log_likelihood = log_w_sum / hit_count;
+
+                // 2. Retrieve Previous Weight (Prior)
+                // Safety: Add epsilon to avoid log(0) if weight was effectively zero
+                double prev_log_weight = std::log(p.weight + 1e-300);
+
+                // 3. Bayesian Update: Log(Posterior) = Log(Prior) + Log(Likelihood)
+                log_weights[i] = prev_log_weight + current_log_likelihood;
+            }
             else
+            {
                 log_weights[i] = -1.0e9;
+            }
         }
 
+        // --- Normalization Logic (Unchanged) ---
         bool any_valid_weight = false;
         for (double w : log_weights)
         {
@@ -333,14 +350,15 @@ namespace grid_fastslam
             }
         }
 
-        // 2. Normalize Weights 
         if (!any_valid_weight)
         {
+            // If all particles failed, reset to uniform distribution to recover
             for (auto &p : particles_)
                 p.weight = 1.0 / num_particles_;
         }
         else
         {
+            // Log-Sum-Exp Normalization
             double log_sum = log_sum_exp(log_weights);
             for (int i = 0; i < num_particles_; ++i)
             {
@@ -357,10 +375,10 @@ namespace grid_fastslam
         {
             sum_sq += (p.weight * p.weight);
         }
-         double n_eff = 1.0 / (sum_sq + 1e-9);
+        double n_eff = 1.0 / (sum_sq + 1e-9);
 
         // 2. Resample only if particles have degraded
-        if (n_eff <= num_particles_ * 0.9)
+        if (n_eff <= num_particles_ * 0.5)
         {
 
             std::vector<Particle> new_particles;
@@ -396,7 +414,7 @@ namespace grid_fastslam
 
     void GridFastSlam::scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg)
     {
-        auto start_time = std::chrono::high_resolution_clock::now(); 
+        auto start_time = std::chrono::high_resolution_clock::now();
         init_lut(msg);
 
         update_particles(msg);
@@ -476,7 +494,7 @@ namespace grid_fastslam
         best_map_msg.info.origin.orientation.w = 1.0;
         best_map_msg.data.resize(MAP_WIDTH * MAP_HEIGHT);
 
-        const auto& best_p = particles_[actual_best_index];
+        const auto &best_p = particles_[actual_best_index];
         for (size_t i = 0; i < best_p.grid.size(); ++i)
         {
             double p = 1.0 / (1.0 + std::exp(-best_p.grid[i]));
@@ -489,7 +507,6 @@ namespace grid_fastslam
         pose.header = map_msg.header;
         pose.pose.position.x = display_p.x;
         pose.pose.position.y = display_p.y;
-
 
         // Yaw to Quaternion (Simple Z-axis rotation)
         pose.pose.orientation.z = std::sin(display_p.yaw * 0.5);
@@ -505,7 +522,7 @@ namespace grid_fastslam
         sensor_msgs::msg::PointCloud2 cloud_msg;
         cloud_msg.header.stamp = this->now();
         cloud_msg.header.frame_id = "map"; // Same frame as your grid
-        cloud_msg.height = 1; 
+        cloud_msg.height = 1;
         cloud_msg.width = particles_.size();
 
         // Initialize the PointCloud fields (x, y, z)

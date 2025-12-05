@@ -37,7 +37,7 @@ class MapSaver(Node):
 
         data = np.array(msg.data).reshape((height, width))
         data = np.flipud(data)
-        img = np.full((height, width, 3), 205, dtype=np.uint8)
+        img = np.full((height, width), 205, dtype=np.uint8)
 
         known_mask = data >= 0
         img[known_mask] = 255 - (data[known_mask] * 255 / 100)
