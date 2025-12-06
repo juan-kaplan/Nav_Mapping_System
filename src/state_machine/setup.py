@@ -30,6 +30,7 @@ setup(
             "map_publisher = state_machine.map_publisher:main",
             "likelihood_map_publisher = state_machine.likelihood:main",
             "localization = state_machine.localization:main",
+            'navigator = state_machine.navigator:main',
         ],
     },
 )

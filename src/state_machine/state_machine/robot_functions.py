@@ -96,14 +96,8 @@ class RobotFunctions:
         return samples
 
     def move_particles(self, deltas):
-        odom_data = {
-            "t": getattr(deltas, "dist", 0.0),  # Translation
-            "r1": getattr(deltas, "rot1", 0.0),  # First rotation
-            "r2": getattr(deltas, "rot2", 0.0),  # Second rotation
-        }
-
         for part in self.particles:
-            part.move_odom(odom_data, [0.1, 0.1, 0.05, 0.05])
+            part.move_odom(deltas, [0.05, 0.05, 0.001, 0.001])
 
     def get_selected_state(
         self,

@@ -1,0 +1,396 @@
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from nav_msgs.msg import OccupancyGrid, Path, GridCells
+from geometry_msgs.msg import PoseStamped, Point, Twist
+from enum import Enum, auto
+import numpy as np
+import heapq
+import math
+
+class State(Enum):
+    IDLE = auto()
+    PLANNING = auto()
+    PURSUIT = auto()
+    OBSTACLE = auto()
+
+class Navigator(Node):
+    def __init__(self):
+        super().__init__('navigator')
+        self.state = State.IDLE
+
+        self.static_map = None
+        self.likelihood_map = None
+        self.combined_map = None
+        self.dynamic_map = None
+
+        self.goal_pose = None
+        self.current_pose = None
+
+        self.maps_ready = False
+
+        map_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+
+        self.sub_static = self.create_subscription(
+            OccupancyGrid, '/map', self.static_map_callback, map_qos)
+
+        self.sub_likelihood = self.create_subscription(
+            OccupancyGrid, '/likelihood_map', self.likelihood_map_callback, map_qos)
+
+        self.sub_goal = self.create_subscription(
+            PoseStamped, '/goal_pose', self.goal_callback, 10)
+
+        self.sub_pose = self.create_subscription(
+            PoseStamped, '/robot_pose', self.pose_callback, 10)
+
+        self.pub_costmap = self.create_publisher(OccupancyGrid, '/fused_costmap', map_qos)
+        self.pub_path = self.create_publisher(Path, '/global_plan', 10)
+        self.pub_path_grid = self.create_publisher(GridCells, '/path_grid', 10)
+        self.pub_vel = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        self.timer = self.create_timer(0.1, self.control_loop)
+        self.get_logger().info("Navigator Initialized in IDLE state.")
+
+    def control_loop(self):
+        if self.state == State.IDLE:
+            self.run_idle_state()
+
+        elif self.state == State.PLANNING:
+            self.run_planning_state()
+
+        elif self.state == State.PURSUIT:
+            self.run_pursuit_state()
+
+        elif self.state == State.OBSTACLE:
+            pass
+
+    def run_idle_state(self):
+        # 1. Map Initialization
+        if self.static_map is None:
+            self.get_logger().info("Waiting for /map...", throttle_duration_sec=2.0)
+            return
+
+        if self.likelihood_map is None:
+            self.get_logger().info("Waiting for /likelihood_map...", throttle_duration_sec=2.0)
+            return
+            
+        # Initialize the combined map if not done yet
+        if not self.maps_ready:
+            self.get_logger().info("Maps received. Fusing Static + Likelihood...")
+            self.init_combined_map()
+            self.maps_ready = True
+
+        # 2. Navigation Prerequisites
+        if self.current_pose is None:
+            self.get_logger().info("Waiting for /robot_pose (Localization)...", throttle_duration_sec=2.0)
+            return
+
+        if self.goal_pose is None:
+            self.get_logger().info("Waiting for /goal_pose...", throttle_duration_sec=2.0)
+            return
+
+        # 3. Transition
+        self.get_logger().info("IDLE: All systems ready. Transitioning to PLANNING.")
+        self.state = State.PLANNING
+
+    def run_planning_state(self):
+        self.get_logger().info("PLANNING: Planning path to goal.")
+        
+        start_world = (self.current_pose.pose.position.x, self.current_pose.pose.position.y)
+        goal_world = (self.goal_pose.pose.position.x, self.goal_pose.pose.position.y)
+        
+        start_grid = self.world_to_grid(start_world)
+        goal_grid = self.world_to_grid(goal_world)
+
+        if self.get_cost(*start_grid) >= 100 or self.get_cost(*goal_grid) >= 100:
+            self.get_logger().warn("PLANNING: Start or Goal is inside an obstacle!")
+            self.state = State.IDLE
+            return
+
+        path_grid = self.astar_search(start_grid, goal_grid)
+
+        if path_grid:
+            self.get_logger().info(f"PLANNING: Path found with {len(path_grid)} steps.")
+
+            self.current_path = [self.grid_to_world(node) for node in path_grid]
+
+            self.publish_path(self.current_path)
+            self.publish_path_grid(path_grid)
+
+            self.state = State.PURSUIT
+        
+        else:
+            self.get_logger().error("PLANNING: No path found.")
+            self.state = State.IDLE
+
+    def run_pursuit_state(self):
+        self.get_logger().info("PURSUIT: Pursuing goal.")
+
+        if not self.current_path or not self.current_pose:
+            self.state = State.IDLE
+            return
+
+        rx = self.current_pose.pose.position.x
+        ry = self.current_pose.pose.position.y
+        ryaw = self.get_yaw_from_pose(self.current_pose.pose)
+
+        LOOKAHEAD_DIST = 0.2
+        GOAL_TOLERANCE = 0.05
+        LINEAR_VEL = 0.05
+        ROTATION_SPEED = 0.5
+        HEADING_TOLERANCE = 0.4
+
+        closest_index = 0
+        min_dist = float('inf')
+
+        search_range = min(len(self.current_path), 50)
+        for i in range(search_range):
+            p = self.current_path[i]
+            dist = math.hypot(p[0] - rx, p[1] - ry)
+            if dist < min_dist:
+                min_dist = dist
+                closest_index = i
+
+        self.current_path = self.current_path[closest_index:]
+        if not self.current_path:
+            self.state = State.IDLE
+            return
+
+        target_point = self.current_path[-1]
+
+        dist_to_goal = math.hypot(target_point[0] - rx, target_point[1] - ry)
+        if dist_to_goal <= GOAL_TOLERANCE:
+            self.get_logger().info("PURSUIT: Goal reached.")
+            self.stop_robot()
+            self.current_path = []
+            self.goal_pose = None
+
+            self.state = State.IDLE
+            return
+
+        for p in self.current_path:
+            dist = math.hypot(p[0] - rx, p[1] - ry)
+            if dist > LOOKAHEAD_DIST:
+                target_point = p
+                break
+
+        tx, ty = target_point
+        dx = tx - rx
+        dy = ty - ry
+
+        target_heading = math.atan2(dy, dx)
+        heading_error = target_heading - ryaw
+
+        while heading_error > math.pi:
+            heading_error -= 2 * math.pi
+        while heading_error < -math.pi:
+            heading_error += 2 * math.pi
+
+        cmd = Twist()
+
+        if abs(heading_error) > HEADING_TOLERANCE:
+            cmd.linear.x = 0.0
+            cmd.angular.z = 2.0 * heading_error
+            cmd.angular.z = max(min(cmd.angular.z, ROTATION_SPEED), -ROTATION_SPEED)
+        
+        else:
+            local_x = dx * math.cos(-ryaw) - dy * math.sin(-ryaw)
+            local_y = dx * math.sin(-ryaw) + dy * math.cos(-ryaw)
+
+            L = math.hypot(local_x, local_y)
+            
+            if L < 0.01:
+                curvature = 0.0
+
+            else:
+                curvature = (2.0 * local_y) / (L ** 2)
+
+            cmd.linear.x = LINEAR_VEL
+            cmd.angular.z = curvature * LINEAR_VEL
+
+            cmd.angular.z = max(min(cmd.angular.z, 1.5), -1.5)
+
+        self.pub_vel.publish(cmd)
+        
+
+    def astar_search(self, start, goal):
+        open_list = []
+        heapq.heappush(open_list, (0, start[0], start[1]))
+
+        came_from = {}
+        g_score = {start: 0}
+
+        neighbors = [
+            (0, 1, 1.0), (0, -1, 1.0), (1, 0, 1.0), (-1, 0, 1.0),  # Straight
+            (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414) # Diagonal
+        ]
+
+        while open_list:
+            current_f, cx, cy = heapq.heappop(open_list)
+            current = cx, cy
+
+            if current == goal:
+                return self.reconstruct_path(came_from, current)
+
+            for dx, dy, move_cost in neighbors:
+                neighbor = cx + dx, cy + dy
+                cell_cost = self.get_cost(*neighbor)
+
+                if cell_cost == float('inf') or cell_cost >= 100:
+                    continue
+
+                terrain_cost = cell_cost * 0.1
+                new_g = g_score[current] + move_cost + terrain_cost
+
+                if neighbor not in g_score or new_g < g_score[neighbor]:
+                    g_score[neighbor] = new_g
+                    f_score = new_g + self.heuristic(neighbor, goal)
+                    heapq.heappush(open_list, (f_score, neighbor[0], neighbor[1]))
+                    came_from[neighbor] = current
+        
+        return None
+
+    def heuristic(self, a, b):
+        return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+    def reconstruct_path(self, came_from, current):
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        path.reverse()
+        return path
+                
+    def init_combined_map(self):
+        static_grid = np.array(self.static_map.data, dtype=np.int16).reshape(
+            (self.map_info.height, self.map_info.width))
+
+        like_grid = np.array(self.likelihood_map.data, dtype=np.int16).reshape(
+            (self.map_info.height, self.map_info.width))
+
+        self.dynamic_map = np.zeros_like(static_grid, dtype=np.int16)
+
+        static_grid[static_grid == -1] = 100
+
+        self.combined_map = static_grid + like_grid
+
+        self.get_logger().info(f"Maps fused. Shape: {self.combined_map.shape}")
+        self.publish_debug_map(self.combined_map)
+
+    def get_cost(self, x, y):
+        if not (0 <= x < self.map_info.width and 0 <= y < self.map_info.height):
+            return float('inf')
+
+        base = self.combined_map[y, x]
+
+        dyn = self.dynamic_map[y, x]
+
+        return base + dyn
+        
+
+    def static_map_callback(self, msg):
+        self.static_map = msg
+        self.map_info = msg.info
+
+    def likelihood_map_callback(self, msg):
+        self.likelihood_map = msg
+
+    def goal_callback(self, msg):
+        self.goal_pose = msg
+        self.get_logger().info(f"Received Goal: {msg.pose.position.x:.2f}, {msg.pose.position.y:.2f}")
+
+        if self.state != State.IDLE:
+             self.get_logger().info("New goal received during operation. Replanning.")
+             self.state = State.PLANNING
+
+    def pose_callback(self, msg):
+        self.current_pose = msg
+
+    def publish_debug_map(self, grid_data):
+        msg = OccupancyGrid()
+        msg.header.frame_id = "map"
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.info = self.map_info
+        
+        display_grid = np.clip(grid_data, 0, 100).astype(np.int8)
+        msg.data = display_grid.flatten().tolist()
+        self.pub_costmap.publish(msg)
+
+    def publish_path(self, path_points):
+        msg = Path()
+        msg.header.frame_id = "map"
+        msg.header.stamp = self.get_clock().now().to_msg()
+
+        for p in path_points:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.pose.position.x = p[0]
+            pose.pose.position.y = p[1]
+            msg.poses.append(pose)
+
+        self.pub_path.publish(msg)
+
+    def publish_path_grid(self, path_nodes):
+        msg = GridCells()
+        msg.header.frame_id = "map"
+        msg.header.stamp = self.get_clock().now().to_msg()
+
+        msg.cell_width = self.map_info.resolution
+        msg.cell_height = self.map_info.resolution
+
+        for node in path_nodes:
+            wx, wy = self.grid_to_world(node)
+
+            p = Point()
+            p.x = wx
+            p.y = wy
+            msg.cells.append(p)
+
+        self.pub_path_grid.publish(msg)
+
+    def world_to_grid(self, world_pos):
+        wx, wy = world_pos
+        ox = self.map_info.origin.position.x
+        oy = self.map_info.origin.position.y
+        res = self.map_info.resolution
+        
+        gx = int((wx - ox) / res)
+        gy = int((wy - oy) / res)
+        return (gx, gy)
+
+    def grid_to_world(self, grid_pos):
+        gx, gy = grid_pos
+        ox = self.map_info.origin.position.x
+        oy = self.map_info.origin.position.y
+        res = self.map_info.resolution
+        
+        wx = (gx * res) + ox + (res / 2.0) # Center of cell
+        wy = (gy * res) + oy + (res / 2.0)
+        return (wx, wy)
+
+    def get_yaw_from_pose(self, pose):
+        """ Extract yaw (rotation around Z) from a Quaternion """
+        q = pose.orientation
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        return yaw
+
+    def stop_robot(self):
+        """ Publishes a zero velocity command to stop immediately """
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
+        self.pub_vel.publish(cmd)
+    
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = Navigator()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

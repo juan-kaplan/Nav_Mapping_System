@@ -1,0 +1,16 @@
+# ROS 2 Build Artifacts
+build/
+install/
+log/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# C++ caches (if using VS Code or CLion)
+.vscode/
+.idea/
+cmake-build-debug/
+
+# OS generated files
+.DS_Store

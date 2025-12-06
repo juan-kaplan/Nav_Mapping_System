@@ -88,6 +88,8 @@ class Odom3Node(Node):
         # Create a publisher for PointCloud2
         self.pointcloud_pub = self.create_publisher(PointCloud2, "/particle_cloud", 10)
 
+        self.pose_pub = self.create_publisher(PoseStamped, '/robot_pose', 10)
+
         self.particle_path_pub = self.create_publisher(Path, "/particle_robot_path", 10)
         self.particle_path_msg = Path()
         self.particle_path_msg.header.frame_id = "map"
@@ -204,10 +206,19 @@ class Odom3Node(Node):
         self.particle_path_msg.header.stamp = self.get_clock().now().to_msg()
         self.particle_path_pub.publish(self.particle_path_msg)
 
+        self.pose_pub.publish(pose_stamped)
+
     def delta_callback(self, data: DeltaOdom):
         if not self.is_initialized:
             return
-        self.robot.move_particles(data)
+
+        odom = {
+            'r1': data.dr1,
+            'r2': data.dr2,
+            't': data.dt
+        }
+
+        self.robot.move_particles(odom)
         self.plot_particles()
 
     def scan_with_calc(self, data: LaserScan):

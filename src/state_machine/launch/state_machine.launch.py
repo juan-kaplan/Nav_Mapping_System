@@ -8,17 +8,20 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("state_machine")
-
     default_rviz_config_path = os.path.join(pkg_share, "rviz", "state_machine.rviz")
 
-    # Declare an argument to allow changing the RViz config from the command line
+    num_particles_arg = DeclareLaunchArgument(
+        name="num_particles",
+        default_value="1000",
+        description="Number of particles for the FastSLAM algorithm",
+    )
+
     rviz_arg = DeclareLaunchArgument(
         name="rviz_config",
         default_value=default_rviz_config_path,
         description="Absolute path to rviz config file",
     )
 
-    # Your custom Map Publisher Node
     map_publisher_node = Node(
         package="state_machine",
         executable="map_publisher",
@@ -38,9 +41,25 @@ def generate_launch_description():
         executable="localization",
         name="localization",
         output="screen",
+        parameters=[
+            {"num_particles": LaunchConfiguration("num_particles")}
+        ],
     )
 
-    # RViz2 Node
+    delta_odom_node = Node(
+        package="tools",
+        executable="delta_odom",
+        name="delta_odom_node",
+        output="screen",
+    )
+
+    navigator_node = Node(
+        package="state_machine",
+        executable="navigator",
+        name="navigator",
+        output="screen",
+    )
+
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -52,9 +71,12 @@ def generate_launch_description():
     return LaunchDescription(
         [
             rviz_arg,
+            num_particles_arg,
             map_publisher_node,
-            rviz_node,
             likelihood_map_pub_node,
             localization_node,
+            delta_odom_node,
+            navigator_node,
+            rviz_node,
         ]
     )
