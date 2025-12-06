@@ -1,4 +1,0 @@
-[console_scripts]
-delta_odom = tools.delta_odom:main
-map_saver = tools.map_saver:main
-

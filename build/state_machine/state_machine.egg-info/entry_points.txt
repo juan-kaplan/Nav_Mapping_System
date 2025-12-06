@@ -1,5 +1,0 @@
-[console_scripts]
-likelihood_map_publisher = state_machine.likelihood:main
-localization = state_machine.localization:main
-map_publisher = state_machine.map_publisher:main
-
