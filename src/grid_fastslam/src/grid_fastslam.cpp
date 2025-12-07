@@ -52,10 +52,10 @@ namespace grid_fastslam
 
     void GridFastSlam::move_particles(double dr1, double dr2, double dt)
     {
-        const double alpha1 = 0.1;
-        const double alpha2 = 0.1;
-        const double alpha3 = 0.01;
-        const double alpha4 = 0.01;
+        const double alpha1 = 0.05;
+        const double alpha2 = 0.05;
+        const double alpha3 = 0.1;
+        const double alpha4 = 0.05;
 
         double sigma_rot1 = alpha1 * std::abs(dr1) + alpha2 * dt;
         double sigma_trans = alpha3 * dt + alpha4 * (std::abs(dr1) + std::abs(dr2));
@@ -141,8 +141,8 @@ namespace grid_fastslam
         double angle = scan->angle_min;
 
         // Define Field of View Limits
-        const double angle_min_limit = -M_PI_2;
-        const double angle_max_limit = M_PI_2;
+        const double angle_min_limit = -M_PI / 3;
+        const double angle_max_limit = M_PI / 3;
 
         for (size_t i = 0; i < scan->ranges.size(); ++i)
         {
@@ -307,24 +307,43 @@ namespace grid_fastslam
             for (const auto &pt : endpoints)
             {
                 auto [r, c] = world_to_grid(pt.first, pt.second);
-                if (r >= 0 && r < MAP_HEIGHT && c >= 0 && c < MAP_WIDTH)
+
+                double best_prob_in_kernel = 0.0;
+                bool found_valid_neighbor = false;
+
+                for (int dr = -1; dr <= 1; ++dr)
                 {
-                    // Get occupancy probability from map
-                    float log_odds = p.grid[r * MAP_WIDTH + c];
-                    double prob = 1.0 / (1.0 + std::exp(-log_odds));
+                    for (int dc = -1; dc <= 1; ++dc)
+                    {
+                        int nr = r + dr;
+                        int nc = c + dc;
 
-                    // Clamp probability to avoid log(0)
-                    prob = std::max(1e-6, std::min(prob, 1.0 - 1e-6));
+                        if (nr >= 0 && nr < MAP_HEIGHT && nc >= 0 && nc < MAP_WIDTH)
+                        {
+                            double log_odds = p.grid[nr * MAP_WIDTH + nc];
+                            double prob = 1.0 / (1.0 + std::exp(-log_odds));
+                            
+                            if (prob > best_prob_in_kernel)
+                            {
+                                best_prob_in_kernel = prob;
+                                found_valid_neighbor = true;
+                            }
+                        }
+                    }
+                }
 
-                    log_w_sum += std::log(prob);
+                if (found_valid_neighbor)
+                {
+                    best_prob_in_kernel = std::max(1e-6, std::min(best_prob_in_kernel, 1.0 - 1e-6));
+                    log_w_sum += std::log(best_prob_in_kernel);
                     hit_count++;
                 }
             }
 
             if (hit_count > 0)
             {
-                // 1. Current Measurement Likelihood (using average to flatten peaked distribution)
-                double current_log_likelihood = log_w_sum / hit_count;
+                // 1. Current Measurement Likelihood
+                double current_log_likelihood = log_w_sum;
 
                 // 2. Retrieve Previous Weight (Prior)
                 // Safety: Add epsilon to avoid log(0) if weight was effectively zero

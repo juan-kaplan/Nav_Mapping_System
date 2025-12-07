@@ -27,6 +27,13 @@ def generate_launch_description():
         description="Number of particles for the GridFastSlam filter",
     )
 
+    delta_odom_node = Node(
+        package="grid_fastslam",
+        executable="delta_odom_node",
+        name="delta_odom_node",
+        output="screen",
+    )
+
     # 3. Nodes
     grid_fastslam_node = Node(
         package=pkg_name,
@@ -45,5 +52,5 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        [rviz_arg, num_particles_arg, grid_fastslam_node, rviz_node]
+        [rviz_arg, num_particles_arg, delta_odom_node, grid_fastslam_node, rviz_node]
     )

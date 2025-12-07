@@ -47,8 +47,8 @@ def generate_launch_description():
     )
 
     delta_odom_node = Node(
-        package="tools",
-        executable="delta_odom",
+        package="grid_fastslam",
+        executable="delta_odom_node",
         name="delta_odom_node",
         output="screen",
     )

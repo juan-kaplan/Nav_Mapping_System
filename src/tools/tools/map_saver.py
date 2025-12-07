@@ -17,7 +17,7 @@ class MapSaver(Node):
         )
 
         self.subscription = self.create_subscription(
-            OccupancyGrid, "/map", self.save_map_callback, 10
+            OccupancyGrid, "/best_map", self.save_map_callback, 10
         )
         self.get_logger().info("Waiting for /map topic to save...")
 
@@ -43,6 +43,10 @@ class MapSaver(Node):
         img[known_mask] = 255 - (data[known_mask] * 255 / 100)
 
         img = img.astype(np.uint8)
+
+        kernel_size = 2
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        img = cv2.erode(img, kernel, iterations=1)
 
         cv2.imwrite(f"{self.map_name}.png", img)
 

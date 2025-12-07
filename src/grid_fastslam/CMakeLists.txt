@@ -18,6 +18,7 @@ find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(custom_msgs REQUIRED)
 find_package(OpenMP REQUIRED)
 
@@ -45,12 +46,27 @@ ament_target_dependencies(grid_fastslam_node
   geometry_msgs
   tf2
   tf2_ros
+  tf2_geometry_msgs
+  custom_msgs
+)
+
+add_executable(delta_odom_node
+  src/delta_odom.cpp
+)
+
+ament_target_dependencies(delta_odom_node
+  rclcpp
+  nav_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
   custom_msgs
 )
 
 # 5. Install Targets
 # Places the executable in the install folder so 'ros2 run' can find it
-install(TARGETS grid_fastslam_node
+install(TARGETS grid_fastslam_node delta_odom_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

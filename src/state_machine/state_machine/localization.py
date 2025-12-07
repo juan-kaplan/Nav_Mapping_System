@@ -110,7 +110,7 @@ class Odom3Node(Node):
 
         # Initialize particles around this pose
         self.robot.initialize_particles_gaussian(
-            x, y, yaw, sigma_pos=0.2, sigma_theta=0.1
+            x, y, yaw, sigma_pos=0.05, sigma_theta=0.1
         )
 
         self.is_initialized = True

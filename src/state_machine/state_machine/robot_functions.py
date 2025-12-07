@@ -67,7 +67,7 @@ class RobotFunctions:
             self.weights = np.ones(self.num_particles) / self.num_particles
 
     def initialize_particles_gaussian(
-        self, mean_x, mean_y, mean_theta, sigma_pos=0.5, sigma_theta=0.1
+        self, mean_x, mean_y, mean_theta, sigma_pos=0.1, sigma_theta=0.1
     ):
         """
         Re-initializes particles around a specific pose with Gaussian noise.

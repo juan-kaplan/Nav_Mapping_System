@@ -3,6 +3,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from nav_msgs.msg import OccupancyGrid, Path, GridCells
 from geometry_msgs.msg import PoseStamped, Point, Twist
+from sensor_msgs.msg import LaserScan
 from enum import Enum, auto
 import numpy as np
 import heapq
@@ -13,6 +14,20 @@ class State(Enum):
     PLANNING = auto()
     PURSUIT = auto()
     OBSTACLE = auto()
+
+class PursuitConfig:
+        LOOKAHEAD_DIST = 0.2
+        GOAL_TOLERANCE = 0.05
+        LINEAR_VEL = 0.05
+        ROTATION_SPEED = 0.5
+        HEADING_TOLERANCE = 0.3
+        MAX_ANGULAR_VEL = 1.5
+        GOAL_ANGLE_TOLERANCE = 0.1
+        OBSTACLE_DETECT_DIST = 0.4
+        OBSTACLE_MAP_DIST = 2.0
+        SCAN_ANGLE_WIDTH = math.pi / 8
+        INFLATION_RADIUS = 1
+        OBSTACLE_SIGMA = 0.3
 
 class Navigator(Node):
     def __init__(self):
@@ -29,6 +44,9 @@ class Navigator(Node):
 
         self.maps_ready = False
 
+        self.front_scan = None
+        self.cfg = PursuitConfig()
+
         map_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
         self.sub_static = self.create_subscription(
@@ -42,6 +60,9 @@ class Navigator(Node):
 
         self.sub_pose = self.create_subscription(
             PoseStamped, '/robot_pose', self.pose_callback, 10)
+        
+        self.sub_scan = self.create_subscription(
+            LaserScan, '/scan', self.scan_callback, 10)
 
         self.pub_costmap = self.create_publisher(OccupancyGrid, '/fused_costmap', map_qos)
         self.pub_path = self.create_publisher(Path, '/global_plan', 10)
@@ -62,7 +83,7 @@ class Navigator(Node):
             self.run_pursuit_state()
 
         elif self.state == State.OBSTACLE:
-            pass
+            self.run_obstacle_state()
 
     def run_idle_state(self):
         # 1. Map Initialization
@@ -94,8 +115,6 @@ class Navigator(Node):
         self.state = State.PLANNING
 
     def run_planning_state(self):
-        self.get_logger().info("PLANNING: Planning path to goal.")
-        
         start_world = (self.current_pose.pose.position.x, self.current_pose.pose.position.y)
         goal_world = (self.goal_pose.pose.position.x, self.goal_pose.pose.position.y)
         
@@ -118,101 +137,95 @@ class Navigator(Node):
             self.publish_path_grid(path_grid)
 
             self.state = State.PURSUIT
+            self.get_logger().info("PLANNING: Path found. Transitioning to PURSUIT.")
         
         else:
             self.get_logger().error("PLANNING: No path found.")
             self.state = State.IDLE
-
+            return
+    
     def run_pursuit_state(self):
-        self.get_logger().info("PURSUIT: Pursuing goal.")
-
         if not self.current_path or not self.current_pose:
             self.state = State.IDLE
             return
 
-        rx = self.current_pose.pose.position.x
-        ry = self.current_pose.pose.position.y
-        ryaw = self.get_yaw_from_pose(self.current_pose.pose)
+        rx, ry, ryaw = self.get_robot_state()
 
-        LOOKAHEAD_DIST = 0.2
-        GOAL_TOLERANCE = 0.05
-        LINEAR_VEL = 0.05
-        ROTATION_SPEED = 0.5
-        HEADING_TOLERANCE = 0.4
+        if self.check_goal_reached(rx, ry):
+            return
 
-        closest_index = 0
-        min_dist = float('inf')
-
-        search_range = min(len(self.current_path), 50)
-        for i in range(search_range):
-            p = self.current_path[i]
-            dist = math.hypot(p[0] - rx, p[1] - ry)
-            if dist < min_dist:
-                min_dist = dist
-                closest_index = i
-
-        self.current_path = self.current_path[closest_index:]
+        self.prune_path(rx, ry)
         if not self.current_path:
             self.state = State.IDLE
             return
 
-        target_point = self.current_path[-1]
+        target_point = self.get_lookahead_point(rx, ry, self.cfg.LOOKAHEAD_DIST)
+        cmd = self.compute_velocity_command(target_point, rx, ry, ryaw)
 
-        dist_to_goal = math.hypot(target_point[0] - rx, target_point[1] - ry)
-        if dist_to_goal <= GOAL_TOLERANCE:
-            self.get_logger().info("PURSUIT: Goal reached.")
-            self.stop_robot()
-            self.current_path = []
-            self.goal_pose = None
+        if cmd.linear.x > 0.0:
+            if self.check_collision_risk():
+                self.stop_robot()
+                self.get_logger().info("Transitioning to OBSTACLE.")
+                self.state = State.OBSTACLE
+                return
 
+        self.pub_vel.publish(cmd)
+
+    def run_obstacle_state(self):
+        if self.front_scan is None or self.current_pose is None:
             self.state = State.IDLE
             return
 
-        for p in self.current_path:
-            dist = math.hypot(p[0] - rx, p[1] - ry)
-            if dist > LOOKAHEAD_DIST:
-                target_point = p
-                break
+        rx, ry, ryaw = self.get_robot_state()
 
-        tx, ty = target_point
-        dx = tx - rx
-        dy = ty - ry
+        ranges = self.front_scan['ranges']
+        angles = self.front_scan['angles']
 
-        target_heading = math.atan2(dy, dx)
-        heading_error = target_heading - ryaw
+        valid = ranges < self.cfg.OBSTACLE_MAP_DIST
 
-        while heading_error > math.pi:
-            heading_error -= 2 * math.pi
-        while heading_error < -math.pi:
-            heading_error += 2 * math.pi
+        ranges = ranges[valid]
+        angles = angles[valid]
 
-        cmd = Twist()
+        local_x = ranges * np.cos(angles)
+        local_y = ranges * np.sin(angles)
 
-        if abs(heading_error) > HEADING_TOLERANCE:
-            cmd.linear.x = 0.0
-            cmd.angular.z = 2.0 * heading_error
-            cmd.angular.z = max(min(cmd.angular.z, ROTATION_SPEED), -ROTATION_SPEED)
-        
-        else:
-            local_x = dx * math.cos(-ryaw) - dy * math.sin(-ryaw)
-            local_y = dx * math.sin(-ryaw) + dy * math.cos(-ryaw)
+        world_x = rx + (local_x * np.cos(ryaw) - local_y * np.sin(ryaw))
+        world_y = ry + (local_x * np.sin(ryaw) + local_y * np.cos(ryaw))
 
-            L = math.hypot(local_x, local_y)
+        obstacles_marked = 0
+
+        if self.dynamic_map is None:
+             self.init_combined_map()
+
+        for wx, wy in zip(world_x, world_y):
+            gx, gy = self.world_to_grid((wx, wy))
+            if gx < 0 or gx >= self.map_info.width or gy < 0 or gy >= self.map_info.height:
+                continue
             
-            if L < 0.01:
-                curvature = 0.0
+            self.dynamic_map[gy, gx] = 100
+            obstacles_marked += 1
 
-            else:
-                curvature = (2.0 * local_y) / (L ** 2)
+            r = self.cfg.INFLATION_RADIUS
+            sigma_sq = self.cfg.OBSTACLE_SIGMA ** 2
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    nx, ny = gx + dx, gy + dy
+                    if 0 <= nx < self.map_info.width and 0 <= ny < self.map_info.height:
+                        dist_sq = (dx * self.map_info.resolution)**2 + (dy * self.map_info.resolution)**2
+                        cost = 100.0 * math.exp(-dist_sq / (2.0 * sigma_sq))
 
-            cmd.linear.x = LINEAR_VEL
-            cmd.angular.z = curvature * LINEAR_VEL
+                        old_cost = self.dynamic_map[ny, nx]
+                        self.dynamic_map[ny, nx] = max(old_cost, int(cost))
 
-            cmd.angular.z = max(min(cmd.angular.z, 1.5), -1.5)
+        self.get_logger().info(f"OBSTACLE: Marked {obstacles_marked} obstacles.")
+        if self.combined_map is not None:
+             debug_view = self.combined_map + self.dynamic_map
+             self.publish_debug_map(debug_view)
 
-        self.pub_vel.publish(cmd)
+        self.state = State.PLANNING
+        self.get_logger().info("OBSTACLE: Transitioning to PLANNING.")
+        return
         
-
     def astar_search(self, start, goal):
         open_list = []
         heapq.heappush(open_list, (0, start[0], start[1]))
@@ -286,7 +299,129 @@ class Navigator(Node):
         dyn = self.dynamic_map[y, x]
 
         return base + dyn
+
+    def stop_robot(self):
+        """ Publishes a zero velocity command to stop immediately """
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
+        self.pub_vel.publish(cmd)
+
+    def prune_path(self, rx, ry):
+        """Removes path points the robot has already passed."""
+        closest_idx = 0
+        min_dist = float('inf')
         
+        search_range = min(len(self.current_path), 50)
+        
+        for i in range(search_range):
+            dist = math.hypot(self.current_path[i][0] - rx, self.current_path[i][1] - ry)
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
+        
+        self.current_path = self.current_path[closest_idx:]
+
+    def get_lookahead_point(self, rx, ry, lookahead_dist):
+        target = self.current_path[0]
+        
+        for p in self.current_path:
+            dist = math.hypot(p[0] - rx, p[1] - ry)
+            if dist > lookahead_dist:
+                target = p
+                break
+        return target
+
+    def check_goal_reached(self, rx, ry):
+        final_pt = self.current_path[-1]
+        dist_to_goal = math.hypot(final_pt[0] - rx, final_pt[1] - ry)
+
+        if dist_to_goal <= self.cfg.GOAL_TOLERANCE:
+            if self.reach_goal_angle(tol=self.cfg.GOAL_ANGLE_TOLERANCE):
+                self.get_logger().info("PURSUIT: Goal reached & Aligned.")
+                self.stop_robot()
+                self.current_path = []
+                self.goal_pose = None
+                self.state = State.IDLE
+            return True
+        
+        return False
+
+    def reach_goal_angle(self, tol=0.1):
+        if self.goal_pose is None or self.current_pose is None:
+            return True
+        
+        current_yaw = self.get_yaw_from_pose(self.current_pose.pose)
+        goal_yaw = self.get_yaw_from_pose(self.goal_pose.pose)
+        
+        yaw_error = goal_yaw - current_yaw
+
+        while yaw_error > math.pi:
+            yaw_error -= 2 * math.pi
+        while yaw_error < -math.pi:
+            yaw_error += 2 * math.pi
+
+        if abs(yaw_error) <= tol:
+            return True
+        
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 1.0 * yaw_error 
+        cmd.angular.z = max(min(cmd.angular.z, 1.0), -1.0)
+
+        self.pub_vel.publish(cmd)
+
+        return False
+
+    def compute_velocity_command(self, target, rx, ry, ryaw):
+        tx, ty = target
+        dx = tx - rx
+        dy = ty - ry
+
+        target_heading = math.atan2(dy, dx)
+        heading_error = self.normalize_angle(target_heading - ryaw)
+
+        cmd = Twist()
+
+        # Rotate in Place
+        if abs(heading_error) > self.cfg.HEADING_TOLERANCE:
+            cmd.linear.x = 0.0
+            cmd.angular.z = 2.0 * heading_error
+            cmd.angular.z = max(min(cmd.angular.z, self.cfg.ROTATION_SPEED), -self.cfg.ROTATION_SPEED)
+        
+        # Pure Pursuit
+        else:
+            local_x = dx * math.cos(-ryaw) - dy * math.sin(-ryaw)
+            local_y = dx * math.sin(-ryaw) + dy * math.cos(-ryaw)
+
+            L = math.hypot(local_x, local_y)
+            
+            curvature = 0.0
+            if L > 0.01:
+                curvature = (2.0 * local_y) / (L ** 2)
+
+            cmd.linear.x = self.cfg.LINEAR_VEL
+            cmd.angular.z = curvature * self.cfg.LINEAR_VEL
+            
+            cmd.angular.z = max(min(cmd.angular.z, self.cfg.MAX_ANGULAR_VEL), -self.cfg.MAX_ANGULAR_VEL)
+
+        return cmd
+
+    def check_collision_risk(self):
+        if self.front_scan is None or len(self.front_scan['ranges']) == 0:
+            return False
+
+        min_dist = np.min(self.front_scan['ranges'])
+        
+        if min_dist < self.cfg.OBSTACLE_DETECT_DIST:
+            self.get_logger().info(f"PURSUIT: Obstacle detected at {min_dist:.2f}m")
+            return True
+        
+        return False
+
+    def get_robot_state(self):
+        pose = self.current_pose.pose
+        return (pose.position.x, pose.position.y, self.get_yaw_from_pose(pose))
 
     def static_map_callback(self, msg):
         self.static_map = msg
@@ -305,6 +440,20 @@ class Navigator(Node):
 
     def pose_callback(self, msg):
         self.current_pose = msg
+
+    def scan_callback(self, msg):
+        ranges = np.array(msg.ranges)
+        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+        angles = np.arctan2(np.sin(angles), np.cos(angles))
+
+        cone_mask = (angles > -self.cfg.SCAN_ANGLE_WIDTH) & \
+                    (angles < self.cfg.SCAN_ANGLE_WIDTH)
+        valid_mask = cone_mask & (ranges > msg.range_min)
+
+        self.front_scan = {
+            'ranges': ranges[valid_mask],
+            'angles': angles[valid_mask]
+        }
 
     def publish_debug_map(self, grid_data):
         msg = OccupancyGrid()
@@ -377,12 +526,10 @@ class Navigator(Node):
         yaw = math.atan2(siny_cosp, cosy_cosp)
         return yaw
 
-    def stop_robot(self):
-        """ Publishes a zero velocity command to stop immediately """
-        cmd = Twist()
-        cmd.linear.x = 0.0
-        cmd.angular.z = 0.0
-        self.pub_vel.publish(cmd)
+    def normalize_angle(self, angle):
+        while angle > math.pi: angle -= 2 * math.pi
+        while angle < -math.pi: angle += 2 * math.pi
+        return angle
     
 
 def main(args=None):

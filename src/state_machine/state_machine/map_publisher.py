@@ -9,13 +9,12 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from nav_msgs.msg import OccupancyGrid
 from ament_index_python.packages import get_package_share_directory
 
-
 class MapPublisher(Node):
     def __init__(self):
         super().__init__("map_publisher")
 
         # Declare parameters so you can change map_name from command line
-        self.declare_parameter("map_name", "custom_casa_2")
+        self.declare_parameter("map_name", "my_map")
         self.map_name = self.get_parameter("map_name").value
 
         # Transient_local ensures RViz gets the map even if it connects AFTER the node starts
