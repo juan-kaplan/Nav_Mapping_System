@@ -97,7 +97,7 @@ class RobotFunctions:
 
     def move_particles(self, deltas):
         for part in self.particles:
-            part.move_odom(deltas, [0.05, 0.05, 0.001, 0.001])
+            part.move_odom(deltas, [0.2, 0.2, 0.02, 0.02])
 
     def get_selected_state(
         self,

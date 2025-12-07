@@ -16,11 +16,11 @@ class State(Enum):
     OBSTACLE = auto()
 
 class PursuitConfig:
-        LOOKAHEAD_DIST = 0.15
+        LOOKAHEAD_DIST = 0.3
         GOAL_TOLERANCE = 0.05
         LINEAR_VEL = 0.05
         ROTATION_SPEED = 0.5
-        HEADING_TOLERANCE = 0.4
+        HEADING_TOLERANCE = 0.3
         MAX_ANGULAR_VEL = 1.5
         GOAL_ANGLE_TOLERANCE = 0.1
         OBSTACLE_DETECT_DIST = 0.5
@@ -28,6 +28,7 @@ class PursuitConfig:
         SCAN_ANGLE_WIDTH = math.pi / 6
         INFLATION_RADIUS = 3
         OBSTACLE_SIGMA = 0.3
+        DECAY_FACTOR = 10
 
 class Navigator(Node):
     def __init__(self):
@@ -151,7 +152,17 @@ class Navigator(Node):
 
         rx, ry, ryaw = self.get_robot_state()
 
-        if self.check_goal_reached(rx, ry):
+        final_pt = self.current_path[-1]
+        dist_to_goal = math.hypot(final_pt[0] - rx, final_pt[1] - ry)
+
+        if dist_to_goal < self.cfg.GOAL_TOLERANCE:
+            self.get_logger().info(f"PURSUIT_DEBUG: Close to Goal! Path length: {len(self.current_path)}, Dist: {dist_to_goal:.2f}m")
+            if self.reach_goal_angle():
+                self.get_logger().info("PURSUIT: Goal reached & Aligned.")
+                self.stop_robot()
+                self.current_path = []
+                self.goal_pose = None
+                self.state = State.IDLE
             return
 
         self.prune_path(rx, ry)
@@ -160,6 +171,8 @@ class Navigator(Node):
             return
 
         target_point = self.get_lookahead_point(rx, ry, self.cfg.LOOKAHEAD_DIST)
+        tx, ty = target_point
+        self.get_logger().info(f"PURSUIT_DEBUG: Lookahead: ({tx:.2f}, {ty:.2f}), Path len: {len(self.current_path)}")
         cmd = self.compute_velocity_command(target_point, rx, ry, ryaw)
 
         if cmd.linear.x > 0.0:
@@ -312,40 +325,31 @@ class Navigator(Node):
         closest_idx = 0
         min_dist = float('inf')
         
-        search_range = min(len(self.current_path), 50)
+        search_limit = len(self.current_path) - 1
         
-        for i in range(search_range):
+        for i in range(search_limit):
             dist = math.hypot(self.current_path[i][0] - rx, self.current_path[i][1] - ry)
             if dist < min_dist:
                 min_dist = dist
                 closest_idx = i
         
-        self.current_path = self.current_path[closest_idx:]
+        if closest_idx > 0 and len(self.current_path) > 1:
+             self.current_path = self.current_path[closest_idx:]
 
     def get_lookahead_point(self, rx, ry, lookahead_dist):
-        target = self.current_path[0]
+        target = self.current_path[-1]
+        min_dist_diff = float('inf')
         
         for p in self.current_path:
             dist = math.hypot(p[0] - rx, p[1] - ry)
-            if dist > lookahead_dist:
-                target = p
-                break
-        return target
+            if dist >= lookahead_dist:
+                dist_diff = abs(dist - lookahead_dist)
 
-    def check_goal_reached(self, rx, ry):
-        final_pt = self.current_path[-1]
-        dist_to_goal = math.hypot(final_pt[0] - rx, final_pt[1] - ry)
-
-        if dist_to_goal <= self.cfg.GOAL_TOLERANCE:
-            if self.reach_goal_angle(tol=self.cfg.GOAL_ANGLE_TOLERANCE):
-                self.get_logger().info("PURSUIT: Goal reached & Aligned.")
-                self.stop_robot()
-                self.current_path = []
-                self.goal_pose = None
-                self.state = State.IDLE
-            return True
+                if dist_diff < min_dist_diff:
+                    min_dist_diff = dist_diff
+                    target = p
         
-        return False
+        return target
 
     def reach_goal_angle(self, tol=0.1):
         if self.goal_pose is None or self.current_pose is None:
@@ -353,13 +357,8 @@ class Navigator(Node):
         
         current_yaw = self.get_yaw_from_pose(self.current_pose.pose)
         goal_yaw = self.get_yaw_from_pose(self.goal_pose.pose)
-        
-        yaw_error = goal_yaw - current_yaw
 
-        while yaw_error > math.pi:
-            yaw_error -= 2 * math.pi
-        while yaw_error < -math.pi:
-            yaw_error += 2 * math.pi
+        yaw_error = self.normalize_angle(goal_yaw - current_yaw)
 
         if abs(yaw_error) <= tol:
             return True
@@ -447,6 +446,13 @@ class Navigator(Node):
             return True
 
         return False
+
+    def decay_dynamic_map(self):
+        if self.dynamic_map is not None:
+            self.dynamic_map.data = np.maximum(0, self.dynamic_map.data - self.cfg.DECAY_FACTOR)
+        
+        if self.combined_map is not None:
+            self.publish_debug_map(self.combined_map + self.dynamic_map)
 
     def get_robot_state(self):
         pose = self.current_pose.pose
