@@ -30,9 +30,6 @@ public:
         calc_path_msg_.header.frame_id = "map";
         real_path_msg_.header.frame_id = "map";
 
-        // --- THE FIX: Timer-based Publishing ---
-        // Instead of publishing on every callback (too fast) or based on distance (too jerky),
-        // we publish exactly at 30Hz. This is smooth for eyes but safe for SLAM.
         publish_timer_ = this->create_wall_timer(
             33ms, std::bind(&DeltaOdomNode::publish_loop, this)); // ~30Hz
     }
@@ -66,8 +63,6 @@ private:
     nav_msgs::msg::Path calc_path_msg_;
     nav_msgs::msg::Path real_path_msg_;
 
-    // 1. INPUT: High Frequency (e.g. 200Hz)
-    // Just accumulate numbers. Do NOT publish here.
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
         double x = msg->pose.pose.position.x;
         double y = msg->pose.pose.position.y;
@@ -116,35 +111,16 @@ private:
         new_real_pose_ = true;
     }
 
-    // 2. OUTPUT: Fixed Frequency (30Hz)
-    // This runs smoothly regardless of input speed.
     void publish_loop() {
-        // --- A. Process Accumulated Motion (SLAM) ---
         double delta_t = std::sqrt(pending_dx_ * pending_dx_ + pending_dy_ * pending_dy_);
         
-        // Only publish if there is ANY motion (prevents spamming 0.00000)
         if (delta_t > 1e-6 || std::abs(pending_dtheta_) > 1e-6) {
-            
-            // Reconstruct the motion model from the accumulated dx/dy
-            // This effectively "summarizes" the last 33ms of movement
             double delta_rot1 = 0.0;
             double delta_rot2 = 0.0;
 
             if (delta_t > 1e-6) {
-                // We use the accumulated vector to find the effective travel direction
                 double heading = std::atan2(pending_dy_, pending_dx_);
-                // Recover the start theta (approximate) by subtracting half the rotation
-                // or simpler: we use the motion model logic but applied to the *chunk*
-                
-                // Note: For GridFastSLAM, simple accumulation is often safer than 
-                // re-calculating rot1/rot2 on the aggregate if the path curved heavily.
-                // However, preserving your original motion model logic:
-                
-                // Angle of the translation vector
                 double trans_angle = std::atan2(pending_dy_, pending_dx_);
-                
-                // We need the theta at the START of this accumulation window
-                // Current theta is last_theta_. Start was:
                 double start_theta = last_theta_ - pending_dtheta_; 
 
                 delta_rot1 = trans_angle - start_theta;

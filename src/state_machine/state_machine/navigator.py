@@ -172,7 +172,6 @@ class Navigator(Node):
 
         target_point = self.get_lookahead_point(rx, ry, self.cfg.LOOKAHEAD_DIST)
         tx, ty = target_point
-        self.get_logger().info(f"PURSUIT_DEBUG: Lookahead: ({tx:.2f}, {ty:.2f}), Path len: {len(self.current_path)}")
         cmd = self.compute_velocity_command(target_point, rx, ry, ryaw)
 
         if cmd.linear.x > 0.0:
