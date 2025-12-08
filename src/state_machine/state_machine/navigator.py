@@ -16,7 +16,7 @@ class State(Enum):
     OBSTACLE = auto()
 
 class PursuitConfig:
-        LOOKAHEAD_DIST = 0.3
+        LOOKAHEAD_DIST = 0.2
         GOAL_TOLERANCE = 0.05
         LINEAR_VEL = 0.05
         ROTATION_SPEED = 0.5
@@ -25,9 +25,9 @@ class PursuitConfig:
         GOAL_ANGLE_TOLERANCE = 0.1
         OBSTACLE_DETECT_DIST = 0.5
         OBSTACLE_MAP_DIST = 0.6
-        SCAN_ANGLE_WIDTH = math.pi / 6
-        INFLATION_RADIUS = 3
-        OBSTACLE_SIGMA = 0.3
+        SCAN_ANGLE_WIDTH = math.pi / 5
+        INFLATION_RADIUS = 4
+        OBSTACLE_SIGMA = 0.6
         DECAY_FACTOR = 10
 
 class Navigator(Node):
@@ -437,7 +437,7 @@ class Navigator(Node):
                 continue
 
             current_cost = self.get_cost(gx, gy)
-            if current_cost < 50:
+            if current_cost < 25:
                 unknown_obstacles_count += 1
 
         if unknown_obstacles_count > 3:
