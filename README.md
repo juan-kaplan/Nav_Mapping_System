@@ -1,4 +1,4 @@
-# Destroyer Workspace
+# Navigation and Mapping System in ROS2
 
 ## Purpose
 This workspace is designed for the implementation and testing of **GridSLAM** (Grid-based Simultaneous Localization and Mapping) and a **State Machine** for autonomous navigation.
