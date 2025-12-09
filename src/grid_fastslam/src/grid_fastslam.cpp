@@ -56,10 +56,10 @@ namespace grid_fastslam
 
     void GridFastSlam::move_particles(double dr1, double dr2, double dt)
     {
-        const double alpha1 = 0.05;
-        const double alpha2 = 0.05;
-        const double alpha3 = 0.1;
-        const double alpha4 = 0.05;
+        const double alpha1 = 0.2;
+        const double alpha2 = 0.2;
+        const double alpha3 = 0.01;
+        const double alpha4 = 0.01;
 
         double sigma_rot1 = alpha1 * std::abs(dr1) + alpha2 * dt;
         double sigma_trans = alpha3 * dt + alpha4 * (std::abs(dr1) + std::abs(dr2));
@@ -325,7 +325,7 @@ namespace grid_fastslam
             }
 
             double scan_score = 0.0;
-            int step = 10;
+            int step = 5;
 
             for (size_t k = 0; k < endpoints.size(); k += step)
             {
@@ -356,7 +356,7 @@ namespace grid_fastslam
             }    
             
             double prev_log_weight = std::log(p.weight + 1e-300);
-            log_weights[i] = prev_log_weight + scan_score;
+            log_weights[i] = prev_log_weight + scan_score * 0.2;
         }
 
         double any_valid = false;
