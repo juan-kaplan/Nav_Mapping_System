@@ -8,6 +8,7 @@ from enum import Enum, auto
 import numpy as np
 import heapq
 import math
+import cv2
 
 class State(Enum):
     IDLE = auto()
@@ -27,8 +28,8 @@ class PursuitConfig:
         OBSTACLE_MAP_DIST = 0.6
         SCAN_ANGLE_WIDTH = math.pi / 5
         INFLATION_RADIUS = 4
-        OBSTACLE_SIGMA = 0.6
-        DECAY_FACTOR = 10
+        OBSTACLE_SIGMA = 0.1
+        DECAY_FACTOR = 0.1
 
 class Navigator(Node):
     def __init__(self):
@@ -74,6 +75,8 @@ class Navigator(Node):
         self.get_logger().info("Navigator Initialized in IDLE state.")
 
     def control_loop(self):
+        self.decay_dynamic_map()
+
         if self.state == State.IDLE:
             self.run_idle_state()
 
@@ -204,40 +207,55 @@ class Navigator(Node):
         world_x = rx + (local_x * np.cos(ryaw) - local_y * np.sin(ryaw))
         world_y = ry + (local_x * np.sin(ryaw) + local_y * np.cos(ryaw))
 
-        obstacles_marked = 0
-
         if self.dynamic_map is None:
              self.init_combined_map()
 
-        for wx, wy in zip(world_x, world_y):
-            gx, gy = self.world_to_grid((wx, wy))
-            if gx < 0 or gx >= self.map_info.width or gy < 0 or gy >= self.map_info.height:
-                continue
-            
-            self.dynamic_map[gy, gx] = 100
-            obstacles_marked += 1
+        scan_mask = np.zeros_like(self.dynamic_map, dtype=np.uint8)
 
-            r = self.cfg.INFLATION_RADIUS
-            sigma_sq = self.cfg.OBSTACLE_SIGMA ** 2
-            for dx in range(-r, r + 1):
-                for dy in range(-r, r + 1):
-                    nx, ny = gx + dx, gy + dy
-                    if 0 <= nx < self.map_info.width and 0 <= ny < self.map_info.height:
-                        dist_sq = (dx * self.map_info.resolution)**2 + (dy * self.map_info.resolution)**2
-                        cost = 100.0 * math.exp(-dist_sq / (2.0 * sigma_sq))
+        ox = self.map_info.origin.position.x
+        oy = self.map_info.origin.position.y
+        res = self.map_info.resolution
 
-                        old_cost = self.dynamic_map[ny, nx]
-                        self.dynamic_map[ny, nx] = max(old_cost, int(cost))
+        gx = ((world_x - ox) / res).astype(np.int32)
+        gy = ((world_y - oy) / res).astype(np.int32)
 
-        self.get_logger().info(f"OBSTACLE: Marked {obstacles_marked} obstacles.")
+        height, width = scan_mask.shape
+        valid_indices = (gx >= 0) & (gx < width) & (gy >= 0) & (gy < height)
+        
+        gx = gx[valid_indices]
+        gy = gy[valid_indices]
+
+        static_free = self.combined_map[gy, gx] < 25
+        gx = gx[static_free]
+        gy = gy[static_free]
+
+        scan_mask[gy, gx] = 1
+
+        obstacles_count = np.sum(scan_mask)
+        if obstacles_count == 0:
+            self.state = State.PLANNING
+            return
+
+        binary_grid = 1 - scan_mask
+
+        dist_grid = cv2.distanceTransform(binary_grid, cv2.DIST_L2, 3)
+        sigma_sq = self.cfg.OBSTACLE_SIGMA ** 2
+        d_sq = (dist_grid * res) ** 2
+        gaussian_cost = 100.0 * np.exp(-d_sq / (2.0 * sigma_sq))
+
+        gaussian_cost[gaussian_cost < 5] = 0
+
+        self.dynamic_map = np.minimum(100, self.dynamic_map + gaussian_cost).astype(np.int16)
+        self.get_logger().info(f"OBSTACLE: Processed {obstacles_count} points via Distance Transform.")
+
         if self.combined_map is not None:
-             debug_view = self.combined_map + self.dynamic_map
-             self.publish_debug_map(debug_view)
+            debug_view = self.combined_map + self.dynamic_map
+            self.publish_debug_map(debug_view)
 
         self.state = State.PLANNING
         self.get_logger().info("OBSTACLE: Transitioning to PLANNING.")
         return
-        
+
     def astar_search(self, start, goal):
         open_list = []
         heapq.heappush(open_list, (0, start[0], start[1]))
@@ -448,8 +466,8 @@ class Navigator(Node):
 
     def decay_dynamic_map(self):
         if self.dynamic_map is not None:
-            self.dynamic_map.data = np.maximum(0, self.dynamic_map.data - self.cfg.DECAY_FACTOR)
-        
+            self.dynamic_map = np.maximum(0, self.dynamic_map - self.cfg.DECAY_FACTOR)
+
         if self.combined_map is not None:
             self.publish_debug_map(self.combined_map + self.dynamic_map)
 
