@@ -44,7 +44,7 @@ class MapSaver(Node):
 
         img = img.astype(np.uint8)
 
-        kernel_size = 2
+        kernel_size = 1
         kernel = np.ones((kernel_size, kernel_size), np.uint8)
         img = cv2.erode(img, kernel, iterations=1)
 
@@ -65,7 +65,7 @@ class MapSaver(Node):
             "free_thresh": 0.196,
         }
 
-        with open(f"{self.map_name}.yaml", "w") as f:
+        with open(f"src/state_machine/maps/{self.map_name}.yaml", "w") as f:
             yaml.dump(yaml_data, f)
 
 

@@ -22,7 +22,7 @@ namespace grid_fastslam
         map_qos.transient_local();
 
         delta_sub_ = this->create_subscription<custom_msgs::msg::DeltaOdom>(
-            "/delta", 10,
+            "/delta", 5,
             std::bind(&GridFastSlam::delta_callback, this, std::placeholders::_1));
 
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -56,10 +56,10 @@ namespace grid_fastslam
 
     void GridFastSlam::move_particles(double dr1, double dr2, double dt)
     {
-        const double alpha1 = 0.2;
-        const double alpha2 = 0.2;
+        const double alpha1 = 0.02;
+        const double alpha2 = 0.01;
         const double alpha3 = 0.01;
-        const double alpha4 = 0.01;
+        const double alpha4 = 0.005;
 
         double sigma_rot1 = alpha1 * std::abs(dr1) + alpha2 * dt;
         double sigma_trans = alpha3 * dt + alpha4 * (std::abs(dr1) + std::abs(dr2));
@@ -325,7 +325,8 @@ namespace grid_fastslam
             }
 
             double scan_score = 0.0;
-            int step = 5;
+            int step = 3;
+            int valid_endpoints = 0;
 
             for (size_t k = 0; k < endpoints.size(); k += step)
             {
@@ -353,7 +354,9 @@ namespace grid_fastslam
                 }
 
                 scan_score += best_val_in_kernel;
-            }    
+                valid_endpoints++;
+            }
+            scan_score /= valid_endpoints + 1e-9;
             
             double prev_log_weight = std::log(p.weight + 1e-300);
             log_weights[i] = prev_log_weight + scan_score * 0.2;
@@ -381,6 +384,8 @@ namespace grid_fastslam
             sum_sq += (p.weight * p.weight);
         }
         double n_eff = 1.0 / (sum_sq + 1e-9);
+        RCLCPP_INFO(this->get_logger(), "Effective Sample Size (N_eff): %f", n_eff);
+
 
         // 2. Resample only if particles have degraded
         if (n_eff <= num_particles_ * 0.5)

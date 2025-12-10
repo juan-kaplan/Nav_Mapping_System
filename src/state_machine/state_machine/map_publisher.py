@@ -14,7 +14,7 @@ class MapPublisher(Node):
         super().__init__("map_publisher")
 
         # Declare parameters so you can change map_name from command line
-        self.declare_parameter("map_name", "my_map")
+        self.declare_parameter("map_name", "my_map2")
         self.map_name = self.get_parameter("map_name").value
 
         # Transient_local ensures RViz gets the map even if it connects AFTER the node starts

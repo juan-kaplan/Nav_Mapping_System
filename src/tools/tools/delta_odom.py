@@ -26,7 +26,7 @@ class DeltaOdomNode(Node):
 
 
         self.subscription_odom = self.create_subscription(
-            Odometry, "/calc_odom", self.odom_callback, 10
+            Odometry, "/calc_odom", self.odom_callback, 5
         )
 
         self.subscription_real_odom = self.create_subscription(
@@ -48,7 +48,7 @@ class DeltaOdomNode(Node):
         self.limit = 1
 
         self.delta_pub = self.create_publisher(
-            DeltaOdom, "/delta", 10
+            DeltaOdom, "/delta", 5
         )
 
     def real_odom_callback(self, data: Odometry):
