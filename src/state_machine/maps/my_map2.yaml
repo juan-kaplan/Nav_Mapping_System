@@ -1,5 +1,5 @@
 free_thresh: 0.196
-image: my_map.png
+image: my_map2.png
 mode: scale
 negate: 0
 occupied_thresh: 0.65
